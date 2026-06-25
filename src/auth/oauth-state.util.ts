@@ -17,29 +17,22 @@ export function parseOAuthState(state?: string): { csrf: string; returnTo: strin
   }
 }
 
-// Blocks open-redirect attempts — only same-app relative paths allowed
 function sanitizeReturnTo(path?: string): string {
-  if (!path) return '/taskboard';
-
-  // If it's an absolute URL, only accept it when the origin matches the
-  // configured FRONTEND_ORIGIN. This lets SPA frontends pass a full URL
-  // while still preventing open redirects to arbitrary domains.
+  if (!path) return '/tasks';
   if (path.includes('://')) {
     try {
       const url = new URL(path);
       const allowed = process.env.FRONTEND_ORIGIN ?? 'http://shivani.local.com:5173';
       if (url.origin === allowed) {
-        // preserve path + search
+		console.log('SANITIZED url:', url);
         return url.pathname + url.search;
       }
-      return '/taskboard';
+      return '/tasks';
     } catch {
-      return '/taskboard';
+      return '/tasks';
     }
   }
 
-  // Reject protocol-relative URLs and paths that don't start with '/'
-  if (!path.startsWith('/') || path.startsWith('//')) return '/taskboard';
-
+  if (!path.startsWith('/') || path.startsWith('//')) return '/tasks';
   return path;
 }

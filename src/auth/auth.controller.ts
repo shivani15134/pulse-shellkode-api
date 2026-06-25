@@ -5,13 +5,14 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import * as crypto from 'crypto';
 import { buildOAuthState, parseOAuthState } from './oauth-state.util';
+import { GoogleAuthGuard } from './google-auth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   // GOOGLE LOGIN START
-  @Get('google')
+@Get('google')
 googleAuth(@Query('returnTo') returnTo: string, @Res() res: Response) {
   const state = buildOAuthState(returnTo);
 
@@ -22,12 +23,15 @@ googleAuth(@Query('returnTo') returnTo: string, @Res() res: Response) {
     maxAge: 5 * 60 * 1000,
   });
 
+  //So, params is an instance of a URLSearchParams object.
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: 'http://shivani.local.com:3000/auth/google/callback',
     response_type: 'code',
     scope: 'email profile',
     prompt: 'select_account',
+	// prompt: 'consent select_account',
+
     state,
   });
 
@@ -37,16 +41,20 @@ googleAuth(@Query('returnTo') returnTo: string, @Res() res: Response) {
 }
 
 @Get('google/callback')
-@UseGuards(AuthGuard('google'))
+@UseGuards(GoogleAuthGuard)
 async googleAuthRedirect(@Req() req, @Res() res: Response) {
   const expectedState = req.cookies?.oauth_state;
   const returnedState = req.query?.state;
 
+   // Validate state to prevent CSRF
   if (!expectedState || !returnedState || expectedState !== returnedState) {
     return res.redirect(
       `http://shivani.local.com:5173/login?error=invalid_oauth_state`,
     );
   }
+
+console.log('EXPECTED:', req.cookies?.oauth_state);
+console.log('RETURNED:', req.query?.state);
 
   res.clearCookie('oauth_state', {
     httpOnly: true,
@@ -55,27 +63,37 @@ async googleAuthRedirect(@Req() req, @Res() res: Response) {
     path: '/',
   });
 
+
+  // Parse state early to extract returnTo for error redirects
   const parsedState = parseOAuthState(returnedState as string);
   const returnTo = parsedState?.returnTo ?? '/taskboard';
+  const baseErrorUrl = `http://shivani.local.com:5173/login?error=`;
 
   const error = req.query?.error;
 
+  if (error === 'access_denied') {
+	res.clearCookie('oauth_state');
+	console.log('Google callback error:', error); // Add this line
+    return res.redirect(
+      `${baseErrorUrl}google_access_denied&returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  }
+
   if (error) {
+	res.clearCookie('oauth_state');
     return res.redirect(
       `http://shivani.local.com:5173/login?error=google_access_denied`,
     );
   }
-
+  // Check if GoogleStrategy successfully authenticated
   const googleUser = req.user;
-
   if (!googleUser) {
-    return res.redirect(
-      'http://shivani.local.com:5173/login?error=auth_failed',
+   return res.redirect(
+      `${baseErrorUrl}auth_failed&returnTo=${encodeURIComponent(returnTo)}`,
     );
   }
 
   const dbUser = await this.authService.validateOrCreateUser(googleUser);
-
   const accessToken = this.authService.generateAccessToken(dbUser);
   const refreshToken = this.authService.generateRefreshToken(dbUser);
 
@@ -106,7 +124,7 @@ async googleAuthRedirect(@Req() req, @Res() res: Response) {
   @Get('ping')
   ping() {
     return {
-      message: 'pong',
+      message: 'Hello from the auth service!',
       time: new Date().toISOString(),
     };
   }
@@ -142,6 +160,7 @@ async googleAuthRedirect(@Req() req, @Res() res: Response) {
   }
 
   // LOGOUT (FIXED PLACE)
+//   TypeScript Method Definition
   @Get('logout')
   logout(@Req() req, @Res() res: Response) {
     const cookieOptions = {

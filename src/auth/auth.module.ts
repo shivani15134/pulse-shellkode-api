@@ -5,15 +5,18 @@ import { GoogleStrategy } from './google.strategy';
 import { UsersModule } from '../users/users.module';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
+import { GoogleAuthGuard } from './google-auth.guard';
 
 @Module({
-  imports: [PassportModule, UsersModule,
-	 JwtModule.register({
+  imports: [
+	PassportModule, 
+	UsersModule,
+	JwtModule.register({
       secret: process.env.JWT_SECRET || 'dev_secret',
       signOptions: { expiresIn: '15m' },
     }),
   ],
   controllers: [AuthController],
-  providers: [GoogleStrategy, AuthService],
+  providers: [GoogleStrategy, AuthService, GoogleAuthGuard],
 })
 export class AuthModule {}
