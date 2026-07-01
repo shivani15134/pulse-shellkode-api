@@ -7,7 +7,12 @@ import { User } from './user.entity';
 export class UsersService {
   constructor(@InjectRepository(User) private userRepo: Repository<User>) {}
 
-  async findOrCreateGoogleUser(googleUser: {email: string; name: string; googleId: string}) {
+  async findOrCreateGoogleUser(googleUser: {
+    email: string;
+    name: string;
+    googleId: string;
+    picture?: string;
+  }) {
     // 1. check if user exists
     let user = await this.userRepo.findOne({
       where: { email: googleUser.email },
@@ -19,23 +24,36 @@ export class UsersService {
         email: googleUser.email,
         name: googleUser.name,
         googleId: googleUser.googleId,
+        picture: googleUser.picture,
       });
 
-	//   Insert the new user into the database and return the saved user with an id
-    await this.userRepo.save(user);
+      //   Insert the new user into the database and return the saved user with an id
+      await this.userRepo.save(user);
+    } else {
+      // Update the picture if it's changed or missing
+      user.picture = googleUser.picture;
+      await this.userRepo.save(user);
     }
+    console.log(user);
 
     return user;
   }
 
   async findAll() {
-  return this.userRepo.find({
-    order: {
-      name: 'ASC',
-    },
+    return this.userRepo.find({
+      order: {
+        name: 'ASC',
+      },
+    });
+  }
+
+  async findById(id: number) {
+  return this.userRepo.findOne({
+    where: { id },
   });
 }
 }
+
 
 
 // @InjectRepository(User)- Give me access to the User table

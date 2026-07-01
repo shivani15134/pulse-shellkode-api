@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany
 } from 'typeorm';
 import { ManyToOne, JoinColumn } from 'typeorm';
 import { Status } from '../../statuses/entities/status.entity';
@@ -65,4 +66,24 @@ assignee!: User | null;
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+@ManyToOne(() => Task, (task) => task.subtasks, { nullable: true })
+@JoinColumn({ name: 'parentId' })
+parent!: Task | null;
+
+@OneToMany(() => Task, (task) => task.parent)
+subtasks!: Task[];
+
+@Column({
+  type: "int",
+  nullable: true,
+})
+estimatedHours!: number | null;
+
+@Column({
+  type: "int",
+  nullable: true,
+})
+spentHours!: number | null;
+  
 }

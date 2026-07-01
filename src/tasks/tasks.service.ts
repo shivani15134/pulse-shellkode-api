@@ -9,6 +9,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { Status } from '../statuses/entities/status.entity';
 
+let status: Status | null = null;
 @Injectable()
 export class TasksService {
   constructor(
@@ -37,13 +38,33 @@ export class TasksService {
   async create(createTaskDto: CreateTaskDto): Promise<Task> {
     const ticketId = await this.generateTicketId();
 
-    const todoStatus = await this.statusesService.findByName('To Do');
+    if (createTaskDto.statusId) {
+      status = await this.statusesService.findById(createTaskDto.statusId);
 
-    if (!todoStatus) {
-      throw new NotFoundException('Default status "To Do" not found');
+      if (!status) {
+        throw new NotFoundException('Status not found');
+      }
+    } else {
+      status = await this.statusesService.findByName('To Do');
+
+      if (!status) {
+        throw new NotFoundException('Default status "To Do" not found');
+      }
     }
 
     let assignee: User | null = null;
+
+    let parent: Task | null = null;
+
+    if (createTaskDto.parentId) {
+      parent = await this.taskRepository.findOne({
+        where: { id: createTaskDto.parentId },
+      });
+
+      if (!parent) {
+        throw new NotFoundException('Parent task not found');
+      }
+    }
 
     if (createTaskDto.assigneeId) {
       const user = await this.userRepository.findOne({
@@ -69,28 +90,45 @@ export class TasksService {
         ? new Date(createTaskDto.startDate)
         : null,
       endDate: createTaskDto.endDate ? new Date(createTaskDto.endDate) : null,
-      status: todoStatus,
+      estimatedHours: createTaskDto.estimatedHours ?? null,
+      spentHours: createTaskDto.spentHours ?? null,
+      status: status,
       assignee,
+      parent,
     });
 
     return this.taskRepository.save(task);
   }
 
   async findAll(filters: {
-    statusId?: number;
+    // statusId?: number;
+    statusId?: number[];
     assigneeId?: number;
-    priority?: string;
-    type?: string;
+    priority?: string[];
+    type?: string[];
     search?: string;
   }) {
+    console.log('findAll called');
+    console.log(filters);
+
     const query = this.taskRepository
       .createQueryBuilder('task')
       .leftJoinAndSelect('task.status', 'status')
-      .leftJoinAndSelect('task.assignee', 'assignee');
+      .leftJoinAndSelect('task.assignee', 'assignee')
+      .leftJoinAndSelect('task.subtasks', 'subtasks')
+      .leftJoinAndSelect('subtasks.status', 'subtaskStatus')
+      .leftJoinAndSelect('subtasks.assignee', 'subtaskAssignee')
+      .where('task.parentId IS NULL');
 
-    if (filters.statusId) {
-      query.andWhere('task.status_id = :statusId', {
-        statusId: filters.statusId,
+    // if (filters.statusId) {
+    //   query.andWhere('task.status_id = :statusId', {
+    //     statusId: filters.statusId,
+    //   });
+    // }
+
+    if (filters.statusId?.length) {
+      query.andWhere('task.status_id IN (:...statusIds)', {
+        statusIds: filters.statusId,
       });
     }
 
@@ -100,15 +138,15 @@ export class TasksService {
       });
     }
 
-    if (filters.priority) {
-      query.andWhere('task.priority = :priority', {
-        priority: filters.priority,
+    if (filters.priority?.length) {
+      query.andWhere('task.priority IN (:...priorities)', {
+        priorities: filters.priority,
       });
     }
 
-    if (filters.type) {
-      query.andWhere('task.type = :type', {
-        type: filters.type,
+    if (filters.type?.length) {
+      query.andWhere('task.type IN (:...types)', {
+        types: filters.type,
       });
     }
 
@@ -128,6 +166,8 @@ export class TasksService {
     }
 
     const tasks = await query.orderBy('task.id', 'ASC').getMany();
+    console.log('Takssssssssss');
+    console.log(JSON.stringify(tasks, null, 2));
 
     return tasks;
   }
@@ -144,6 +184,8 @@ export class TasksService {
     if (!task) {
       throw new NotFoundException('Task not found');
     }
+    console.log('updateTaskDto:', updateTaskDto);
+    console.log('Before save:', task);
 
     if (updateTaskDto.title !== undefined) {
       task.title = updateTaskDto.title;
@@ -165,15 +207,19 @@ export class TasksService {
       task.status = status;
     }
 
-    if (updateTaskDto.assigneeId !== undefined) {
-      const assignee = await this.userRepository.findOne({
-        where: {
-          id: updateTaskDto.assigneeId,
-        },
-      });
+    // if (updateTaskDto.assigneeId !== undefined) {
+    //   const assignee = await this.userRepository.findOne({
+    //     where: {
+    //       id: updateTaskDto.assigneeId,
+    //     },
+    //   });
 
-      task.assignee = assignee ?? null;
-    }
+    //   task.assignee = assignee ?? null;
+    // }
+
+    task.assignee = {
+      id: updateTaskDto.assigneeId,
+    } as User;
 
     if (updateTaskDto.startDate !== undefined) {
       task.startDate = updateTaskDto.startDate
@@ -185,6 +231,14 @@ export class TasksService {
       task.endDate = updateTaskDto.endDate
         ? new Date(updateTaskDto.endDate)
         : null;
+    }
+
+    if (updateTaskDto.estimatedHours !== undefined) {
+      task.estimatedHours = updateTaskDto.estimatedHours;
+    }
+
+    if (updateTaskDto.spentHours !== undefined) {
+      task.spentHours = updateTaskDto.spentHours;
     }
 
     return this.taskRepository.save(task);

@@ -14,8 +14,8 @@ export class User {
   @Column({ nullable: true })
   googleId!: string;
 
-  @Column({ nullable: true })
-  picture!: string;
+@Column({ nullable: true })
+picture?: string;
 
   @CreateDateColumn()
   createdAt!: Date;

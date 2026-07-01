@@ -44,4 +44,8 @@ export class AuthService {
   verifyRefreshToken(token: string) {
     return this.jwtService.verify(token);
   }
+
+  async findById(id: number) {
+  return this.usersService.findById(id);
+}
 }

@@ -9,117 +9,117 @@ import { GoogleAuthGuard } from './google-auth.guard';
 
 @Controller('auth')
 export class AuthController {
+  usersService: any;
   constructor(private authService: AuthService) {}
 
   // GOOGLE LOGIN START
-@Get('google')
-googleAuth(@Query('returnTo') returnTo: string, @Res() res: Response) {
-  const state = buildOAuthState(returnTo);
+  @Get('google')
+  googleAuth(@Query('returnTo') returnTo: string, @Res() res: Response) {
+    const state = buildOAuthState(returnTo);
 
-  res.cookie('oauth_state', state, {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
-    maxAge: 5 * 60 * 1000,
-  });
+    res.cookie('oauth_state', state, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: 5 * 60 * 1000,
+    });
 
-  //So, params is an instance of a URLSearchParams object.
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri: 'http://shivani.local.com:3000/auth/google/callback',
-    response_type: 'code',
-    scope: 'email profile',
-    prompt: 'select_account',
-	// prompt: 'consent select_account',
+    //So, params is an instance of a URLSearchParams object.
+    const params = new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      redirect_uri: 'http://shivani.local.com:3000/auth/google/callback',
+      response_type: 'code',
+      scope: 'email profile',
+      prompt: 'select_account',
+      // prompt: 'consent select_account',
 
-    state,
-  });
+      state,
+    });
 
-  return res.redirect(
-    `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
-  );
-}
-
-@Get('google/callback')
-@UseGuards(GoogleAuthGuard)
-async googleAuthRedirect(@Req() req, @Res() res: Response) {
-  const expectedState = req.cookies?.oauth_state;
-  const returnedState = req.query?.state;
-
-   // Validate state to prevent CSRF
-  if (!expectedState || !returnedState || expectedState !== returnedState) {
     return res.redirect(
-      `http://shivani.local.com:5173/login?error=invalid_oauth_state`,
+      `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
     );
   }
 
-console.log('EXPECTED:', req.cookies?.oauth_state);
-console.log('RETURNED:', req.query?.state);
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuthRedirect(@Req() req, @Res() res: Response) {
+    const expectedState = req.cookies?.oauth_state;
+    const returnedState = req.query?.state;
 
-  res.clearCookie('oauth_state', {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
-    path: '/',
-  });
+    // Validate state to prevent CSRF
+    if (!expectedState || !returnedState || expectedState !== returnedState) {
+      return res.redirect(
+        `http://shivani.local.com:5173/login?error=invalid_oauth_state`,
+      );
+    }
 
+    console.log('EXPECTED:', req.cookies?.oauth_state);
+    console.log('RETURNED:', req.query?.state);
 
-  // Parse state early to extract returnTo for error redirects
-  const parsedState = parseOAuthState(returnedState as string);
-  const returnTo = parsedState?.returnTo ?? '/taskboard';
-  const baseErrorUrl = `http://shivani.local.com:5173/login?error=`;
+    res.clearCookie('oauth_state', {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      path: '/',
+    });
 
-  const error = req.query?.error;
+    // Parse state early to extract returnTo for error redirects
+    const parsedState = parseOAuthState(returnedState as string);
+    const returnTo = parsedState?.returnTo ?? '/taskboard';
+    const baseErrorUrl = `http://shivani.local.com:5173/login?error=`;
 
-  if (error === 'access_denied') {
-	res.clearCookie('oauth_state');
-	console.log('Google callback error:', error); // Add this line
-    return res.redirect(
-      `${baseErrorUrl}google_access_denied&returnTo=${encodeURIComponent(returnTo)}`,
-    );
+    const error = req.query?.error;
+
+    if (error === 'access_denied') {
+      res.clearCookie('oauth_state');
+      console.log('Google callback error:', error); // Add this line
+      return res.redirect(
+        `${baseErrorUrl}google_access_denied&returnTo=${encodeURIComponent(returnTo)}`,
+      );
+    }
+
+    if (error) {
+      res.clearCookie('oauth_state');
+      return res.redirect(
+        `http://shivani.local.com:5173/login?error=google_access_denied`,
+      );
+    }
+    // Check if GoogleStrategy successfully authenticated
+    const googleUser = req.user;
+    if (!googleUser) {
+      return res.redirect(
+        `${baseErrorUrl}auth_failed&returnTo=${encodeURIComponent(returnTo)}`,
+      );
+    }
+
+    const dbUser = await this.authService.validateOrCreateUser(googleUser);
+    const accessToken = this.authService.generateAccessToken(dbUser);
+    const refreshToken = this.authService.generateRefreshToken(dbUser);
+
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.redirect(`http://shivani.local.com:5173${returnTo}`);
   }
-
-  if (error) {
-	res.clearCookie('oauth_state');
-    return res.redirect(
-      `http://shivani.local.com:5173/login?error=google_access_denied`,
-    );
-  }
-  // Check if GoogleStrategy successfully authenticated
-  const googleUser = req.user;
-  if (!googleUser) {
-   return res.redirect(
-      `${baseErrorUrl}auth_failed&returnTo=${encodeURIComponent(returnTo)}`,
-    );
-  }
-
-  const dbUser = await this.authService.validateOrCreateUser(googleUser);
-  const accessToken = this.authService.generateAccessToken(dbUser);
-  const refreshToken = this.authService.generateRefreshToken(dbUser);
-
-  res.cookie('access_token', accessToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
-    maxAge: 15 * 60 * 1000,
-  });
-
-  res.cookie('refresh_token', refreshToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-
-  return res.redirect(`http://shivani.local.com:5173${returnTo}`);
-}
 
   // GET CURRENT USER
   @Get('me')
-  @UseGuards(JwtAuthGuard)
-  getMe(@Req() req) {
-    return req.user;
-  }
+@UseGuards(JwtAuthGuard)
+async getMe(@Req() req) {
+  return this.authService.findById(req.user.sub);
+}
 
   @Get('ping')
   ping() {
@@ -160,7 +160,7 @@ console.log('RETURNED:', req.query?.state);
   }
 
   // LOGOUT (FIXED PLACE)
-//   TypeScript Method Definition
+  //   TypeScript Method Definition
   @Get('logout')
   logout(@Req() req, @Res() res: Response) {
     const cookieOptions = {

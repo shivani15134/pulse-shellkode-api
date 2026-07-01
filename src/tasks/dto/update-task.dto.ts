@@ -22,4 +22,13 @@ export class UpdateTaskDto {
 
   @IsOptional()
   endDate?: string;
+
+
+ @IsOptional()
+  @IsInt()
+  estimatedHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  spentHours?: number;
 }

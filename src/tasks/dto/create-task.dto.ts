@@ -12,6 +12,14 @@ export class CreateTaskDto {
   title!: string;
 
   @IsOptional()
+  @IsInt()
+  parentId?: number;
+
+  @IsOptional()
+  @IsInt()
+  statusId?: number;
+
+  @IsOptional()
   @IsString()
   priority?: string;
 
@@ -30,4 +38,12 @@ export class CreateTaskDto {
   @IsOptional()
   @IsString()
   type?: string;
+
+  @IsOptional()
+  @IsInt()
+  estimatedHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  spentHours?: number;
 }
